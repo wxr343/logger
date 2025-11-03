@@ -7,7 +7,6 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
-	"log"
 	"os"
 	"time"
 )
@@ -22,62 +21,69 @@ func init() {
 }
 
 func InitializeLog(logConfig ...config.Configuration) *zap.Logger {
-	var file string
-	// 创建根目录
-	createRootDir()
-
+	var SetConfig config.Log
+	if len(logConfig) == 0 {
+		SetConfig = global.App.Config.Log
+	} else {
+		SetConfig = logConfig[0].Log
+	}
 	// 设置日志等级
-	setLogLevel()
-
-	if global.App.Config.Log.ShowLine {
+	setLogLevel(SetConfig.Level)
+	// 设置日志目录
+	createRootDir(SetConfig.RootDir)
+	// 设置日志是否显示调用行
+	if SetConfig.ShowLine {
 		options = append(options, zap.AddCaller())
 	}
-	if len(logConfig) == 0 {
-		file = global.App.Config.Log.Filename[0]
+
+	return zap.New(getZapCore(SetConfig), options...)
+}
+
+func createRootDir(LogPath ...string) {
+	var logPath string
+	if len(LogPath) == 0 {
+		logPath = global.App.Config.Log.RootDir
 	} else {
-		if len(logConfig) > 1 {
-			log.Fatal("logConfig too many")
-			return nil
-		}
-		for _, v := range logConfig {
-			file = v.Log.Filename[0]
-		}
+		logPath = LogPath[0]
 	}
-	// 初始化 zap
-	return zap.New(getZapCore(file), options...)
-}
 
-func createRootDir() {
-	if ok, _ := utils.PathExists(global.App.Config.Log.RootDir); !ok {
-		_ = os.Mkdir(global.App.Config.Log.RootDir, os.ModePerm)
+	if ok, _ := utils.PathExists(logPath); !ok {
+		_ = os.Mkdir(logPath, os.ModePerm)
 	}
 }
 
-func setLogLevel() {
-	switch global.App.Config.Log.Level {
+func setLogLevel(SetLevel ...string) {
+	var logLevel string
+	if len(SetLevel) == 0 {
+		logLevel = global.App.Config.Log.Level
+	} else {
+		logLevel = SetLevel[0]
+	}
+	switch logLevel {
 	case "debug":
 		level = zap.DebugLevel
-		options = append(options, zap.AddStacktrace(level))
 	case "info":
 		level = zap.InfoLevel
 	case "warn":
 		level = zap.WarnLevel
 	case "error":
 		level = zap.ErrorLevel
-		options = append(options, zap.AddStacktrace(level))
 	case "dpanic":
 		level = zap.DPanicLevel
+		options = append(options, zap.AddStacktrace(level))
 	case "panic":
 		level = zap.PanicLevel
+		options = append(options, zap.AddStacktrace(level))
 	case "fatal":
 		level = zap.FatalLevel
+		options = append(options, zap.AddStacktrace(level))
 	default:
 		level = zap.InfoLevel
 	}
 }
 
 // 扩展 Zap
-func getZapCore(fileName string) zapcore.Core {
+func getZapCore(logConfig config.Log) zapcore.Core {
 	var encoder zapcore.Encoder
 	var logCore zapcore.Core
 	// 调整编码器默认配置
@@ -90,24 +96,24 @@ func getZapCore(fileName string) zapcore.Core {
 	}
 
 	// 设置编码器
-	if global.App.Config.Log.Format == "json" {
+	if logConfig.Format == "json" {
 		encoder = zapcore.NewJSONEncoder(encoderConfig)
 	} else {
 		encoder = zapcore.NewConsoleEncoder(encoderConfig)
 	}
 
-	logCore = zapcore.NewCore(encoder, getLogWriter(fileName), level)
+	logCore = zapcore.NewCore(encoder, getLogWriter(logConfig), level)
 	return logCore
 }
 
 // 使用 lumberjack 作为日志写入器
-func getLogWriter(fileName string) zapcore.WriteSyncer {
+func getLogWriter(logConfig config.Log) zapcore.WriteSyncer {
 	file := &lumberjack.Logger{
-		Filename:   global.App.Config.Log.RootDir + "/" + fileName,
-		MaxSize:    global.App.Config.Log.MaxSize,
-		MaxBackups: global.App.Config.Log.MaxBackups,
-		MaxAge:     global.App.Config.Log.MaxAge,
-		Compress:   global.App.Config.Log.Compress,
+		Filename:   logConfig.RootDir + "/" + logConfig.Filename[0],
+		MaxSize:    logConfig.MaxSize,
+		MaxBackups: logConfig.MaxBackups,
+		MaxAge:     logConfig.MaxAge,
+		Compress:   logConfig.Compress,
 	}
 
 	return zapcore.AddSync(file)

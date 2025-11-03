@@ -3,7 +3,6 @@ log:
   root_dir: ./logs # 日志根目录
   filename:
     - app_log1.json # 日志文件名称
-    - app_log2.json # 日志文件名称
   format: json # 写入格式 可选json
   show_line: true # 是否显示调用行
   max_backups: 3 # 旧文件的最大个数
